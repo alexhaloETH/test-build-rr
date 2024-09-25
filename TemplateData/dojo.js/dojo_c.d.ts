@@ -2,6 +2,12 @@ declare namespace wasm_bindgen {
 	/* tslint:disable */
 	/* eslint-disable */
 	/**
+	* @param {string} typed_data
+	* @param {string} address
+	* @returns {string}
+	*/
+	export function typedDataEncode(typed_data: string, address: string): string;
+	/**
 	* @returns {string}
 	*/
 	export function signingKeyNew(): string;
@@ -37,12 +43,26 @@ declare namespace wasm_bindgen {
 	*/
 	export function hashGetContractAddress(class_hash: string, salt: string, constructor_calldata: (string)[], deployer_address: string): string;
 	/**
+	* @param {string} str
+	* @returns {(string)[]}
+	*/
+	export function byteArraySerialize(str: string): (string)[];
+	/**
+	* @param {(string)[]} felts
+	* @returns {string}
+	*/
+	export function byteArrayDeserialize(felts: (string)[]): string;
+	/**
+	* @param {(string)[]} inputs
+	* @returns {string}
+	*/
+	export function poseidonHash(inputs: (string)[]): string;
+	/**
 	* Create the a client with the given configurations.
-	* @param {KeysClauses} initialModelsToSync
 	* @param {ClientConfig} config
 	* @returns {Promise<Client>}
 	*/
-	export function createClient(initialModelsToSync: KeysClauses, config: ClientConfig): Promise<Client>;
+	export function createClient(config: ClientConfig): Promise<Client>;
 	export interface ClientConfig {
 	    rpcUrl: string;
 	    toriiUrl: string;
@@ -75,11 +95,21 @@ declare namespace wasm_bindgen {
 	
 	export type Clause = { Keys: KeysClause } | { Member: MemberClause } | { Composite: CompositeClause };
 	
-	export type KeysClauses = KeysClause[];
+	export type KeysClauses = ModelKeysClause[];
 	
-	export interface KeysClause {
+	export interface ModelKeysClause {
 	    model: string;
 	    keys: string[];
+	}
+	
+	export type PatternMatching = "FixedLen" | "VariableLen";
+	
+	export type EntityKeysClause = { HashedKeys: string[] } | { Keys: KeysClause };
+	
+	export interface KeysClause {
+	    keys: (string | null)[];
+	    pattern_matching: PatternMatching;
+	    models: string[];
 	}
 	
 	export interface MemberClause {
@@ -130,9 +160,10 @@ declare namespace wasm_bindgen {
 	*/
 	  executeRaw(calldata: Calls): Promise<string>;
 	/**
+	* @param {string} private_key
 	* @returns {Promise<Account>}
 	*/
-	  deployBurner(): Promise<Account>;
+	  deployBurner(private_key: string): Promise<Account>;
 	}
 	/**
 	*/
@@ -143,6 +174,17 @@ declare namespace wasm_bindgen {
 	* @returns {Promise<any>}
 	*/
 	  getEntities(query: Query): Promise<any>;
+	/**
+	* @param {number} limit
+	* @param {number} offset
+	* @returns {Promise<any>}
+	*/
+	  getAllEntities(limit: number, offset: number): Promise<any>;
+	/**
+	* @param {Query} query
+	* @returns {Promise<any>}
+	*/
+	  getEventMessages(query: Query): Promise<any>;
 	/**
 	* Retrieves the model value of an entity. Will fetch from remote if the requested entity is not one of the entities that are being synced.
 	* @param {string} model
@@ -164,38 +206,29 @@ declare namespace wasm_bindgen {
 	  removeModelsToSync(models: KeysClauses): Promise<void>;
 	/**
 	* Register a callback to be called every time the specified synced entity's value changes.
-	* @param {KeysClause} model
+	* @param {ModelKeysClause} model
 	* @param {Function} callback
-	* @returns {Promise<void>}
+	* @returns {Promise<Subscription>}
 	*/
-	  onSyncModelChange(model: KeysClause, callback: Function): Promise<void>;
+	  onSyncModelChange(model: ModelKeysClause, callback: Function): Promise<Subscription>;
 	/**
-	* @param {(string)[] | undefined} ids
+	* @param {EntityKeysClause | undefined} clause
 	* @param {Function} callback
-	* @returns {Promise<void>}
+	* @returns {Promise<Subscription>}
 	*/
-	  onEntityUpdated(ids: (string)[] | undefined, callback: Function): Promise<void>;
+	  onEntityUpdated(clause: EntityKeysClause | undefined, callback: Function): Promise<Subscription>;
 	/**
-	* @param {string} topic
-	* @returns {Promise<boolean>}
+	* @param {EntityKeysClause | undefined} clause
+	* @param {Function} callback
+	* @returns {Promise<Subscription>}
 	*/
-	  subscribeTopic(topic: string): Promise<boolean>;
+	  onEventMessageUpdated(clause: EntityKeysClause | undefined, callback: Function): Promise<Subscription>;
 	/**
-	* @param {string} topic
-	* @returns {Promise<boolean>}
-	*/
-	  unsubscribeTopic(topic: string): Promise<boolean>;
-	/**
-	* @param {string} topic
-	* @param {Uint8Array} message
+	* @param {string} message
+	* @param {JsSignature} signature
 	* @returns {Promise<Uint8Array>}
 	*/
-	  publishMessage(topic: string, message: Uint8Array): Promise<Uint8Array>;
-	/**
-	* @param {Function} callback
-	* @returns {Promise<void>}
-	*/
-	  onMessage(callback: Function): Promise<void>;
+	  publishMessage(message: string, signature: JsSignature): Promise<Uint8Array>;
 	}
 	/**
 	*/
@@ -309,6 +342,14 @@ declare namespace wasm_bindgen {
 	*/
 	  readonly mode: any;
 	}
+	/**
+	*/
+	export class Subscription {
+	  free(): void;
+	/**
+	*/
+	  cancel(): void;
+	}
 	
 }
 
@@ -318,7 +359,9 @@ declare interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_provider_free: (a: number) => void;
   readonly __wbg_account_free: (a: number) => void;
+  readonly __wbg_subscription_free: (a: number) => void;
   readonly __wbg_client_free: (a: number) => void;
+  readonly typedDataEncode: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly signingKeyNew: (a: number) => void;
   readonly signingKeySign: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly verifyingKeyNew: (a: number, b: number, c: number) => void;
@@ -331,19 +374,23 @@ declare interface InitOutput {
   readonly account_chainId: (a: number, b: number) => void;
   readonly account_setBlockId: (a: number, b: number, c: number, d: number) => void;
   readonly account_executeRaw: (a: number, b: number) => number;
-  readonly account_deployBurner: (a: number) => number;
+  readonly account_deployBurner: (a: number, b: number, c: number) => number;
   readonly hashGetContractAddress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+  readonly byteArraySerialize: (a: number, b: number, c: number) => void;
+  readonly byteArrayDeserialize: (a: number, b: number, c: number) => void;
+  readonly poseidonHash: (a: number, b: number, c: number) => void;
   readonly client_getEntities: (a: number, b: number) => number;
+  readonly client_getAllEntities: (a: number, b: number, c: number) => number;
+  readonly client_getEventMessages: (a: number, b: number) => number;
   readonly client_getModelValue: (a: number, b: number, c: number, d: number, e: number) => number;
   readonly client_addModelsToSync: (a: number, b: number) => number;
   readonly client_removeModelsToSync: (a: number, b: number) => number;
   readonly client_onSyncModelChange: (a: number, b: number, c: number) => number;
-  readonly client_onEntityUpdated: (a: number, b: number, c: number, d: number) => number;
-  readonly client_subscribeTopic: (a: number, b: number, c: number) => number;
-  readonly client_unsubscribeTopic: (a: number, b: number, c: number) => number;
-  readonly client_publishMessage: (a: number, b: number, c: number, d: number, e: number) => number;
-  readonly client_onMessage: (a: number, b: number) => number;
-  readonly createClient: (a: number, b: number) => number;
+  readonly client_onEntityUpdated: (a: number, b: number, c: number) => number;
+  readonly client_onEventMessageUpdated: (a: number, b: number, c: number) => number;
+  readonly client_publishMessage: (a: number, b: number, c: number, d: number) => number;
+  readonly subscription_cancel: (a: number) => void;
+  readonly createClient: (a: number) => number;
   readonly __wbg_queuingstrategy_free: (a: number) => void;
   readonly queuingstrategy_highWaterMark: (a: number) => number;
   readonly __wbg_intounderlyingsink_free: (a: number) => void;
@@ -369,14 +416,14 @@ declare interface InitOutput {
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export_2: WebAssembly.Table;
-  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h6a81129acb643393: (a: number, b: number, c: number) => void;
-  readonly wasm_bindgen__convert__closures__invoke0_mut__hd574114c4d9cf57f: (a: number, b: number) => void;
-  readonly wasm_bindgen__convert__closures__invoke1_mut__h802007b5f737ac1e: (a: number, b: number, c: number) => void;
-  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h68313b65f95fdd11: (a: number, b: number, c: number) => void;
+  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h02744ff72e97ed73: (a: number, b: number, c: number) => void;
+  readonly wasm_bindgen__convert__closures__invoke0_mut__hef135aeadb8d9b2d: (a: number, b: number) => void;
+  readonly wasm_bindgen__convert__closures__invoke1_mut__h80d0ff2204b1ffde: (a: number, b: number, c: number) => void;
+  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h54a3cbc5936c0dc6: (a: number, b: number, c: number) => void;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_exn_store: (a: number) => void;
-  readonly wasm_bindgen__convert__closures__invoke2_mut__h8a502170c0201eea: (a: number, b: number, c: number, d: number) => void;
+  readonly wasm_bindgen__convert__closures__invoke2_mut__hee2649badc712846: (a: number, b: number, c: number, d: number) => void;
 }
 
 /**
